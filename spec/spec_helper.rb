@@ -13,6 +13,12 @@
 # it.
 #
 # See http://rubydoc.info/gems/rspec-core/RSpec/Core/Configuration
+require 'capybara/rspec'
+require 'rack_session_access/capybara'
+require 'selenium/webdriver'
+require 'aasm/rspec'
+require 'active_storage_validations/matchers'
+
 RSpec.configure do |config|
   # rspec-expectations config goes here. You can use an alternate
   # assertion/expectation library such as wrong or the stdlib/minitest
@@ -93,4 +99,12 @@ RSpec.configure do |config|
   # as the one that triggered the failure.
   Kernel.srand config.seed
 =end
+
+  config.before(:each, js: true) do
+    Capybara.page.driver.browser.manage.window.resize_to(1920, 1080)
+  end
+
+  config.after(:suite) do
+    FileUtils.rm_rf(Dir["#{Rails.root}/spec/test_files/"])
+  end
 end
