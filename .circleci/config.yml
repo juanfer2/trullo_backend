@@ -1,0 +1,174 @@
+version: 2.1
+orbs:
+  browser-tools: circleci/browser-tools@1.1
+jobs:
+  test:
+    docker:
+      - image: cimg/ruby:3.0.0-browsers
+        environment:
+          BUNDLE_JOBS: 3
+          BUNDLE_RETRY: 3
+          BUNDLE_PATH: vendor/bundle
+          PGHOST: 127.0.0.1
+          PGUSER: circleci-demo-ruby
+          RAILS_ENV: test
+          TZ: 'Etc/UTC'
+      - image: circleci/postgres:11.0
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: trullo_test
+          POSTGRES_PASSWORD: ''
+          TZ: 'Etc/UTC'
+    environment:
+        TZ: 'Etc/UTC'
+    parallelism: 3
+
+    steps:
+      - browser-tools/install-chrome
+      - checkout
+
+      - run:
+          name: Install Bundler
+          command: gem install bundler
+
+      - run:
+          name: Which bundler?
+          command: bundle -v
+
+      - restore_cache:
+          name: Restore gem cache
+          keys:
+            - gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
+            - gem-cache-v1-{{ arch }}-{{ .Branch }}
+            - gem-cache-v1-{{ arch }}
+            - gem-cache-v1
+
+      - restore_cache:
+          name: Restore yarn cache
+          keys:
+            - yarn-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
+            - yarn-cache-v1-{{ arch }}-{{ .Branch }}
+            - yarn-cache-v1-{{ arch }}
+            - yarn-cache-v1
+
+      - restore_cache:
+          name: Restore assets cache
+          keys:
+            - assets-cache-v1-{{ arch }}-{{ .Branch }}
+            - assets-cache-v1-{{ arch }}
+            - assets-cache-v1
+
+      - run:
+          name: Install system dependencies
+          command: sudo apt update && sudo apt install cmake curl
+
+      - run:
+          name: Install Volta
+          command: |
+            curl https://get.volta.sh | bash
+            echo 'export VOLTA_HOME=$HOME/.volta' >> $BASH_ENV
+            echo 'export PATH=$HOME/.volta/bin:$PATH' >> $BASH_ENV
+
+      - run:
+          name: Fetch node versions
+          command: |
+            node --version
+            yarn --version
+            echo 'export PATH=$HOME/.volta/tools/image/yarn/1.22.5/bin:$PATH' >> $BASH_ENV
+
+      - run:
+          name: Install app dependencies
+          command: |
+            bundle check || bundle install --jobs=6 --retry=3 --path vendor/bundle
+
+      - run:
+          name: Wait for DB
+          command: dockerize -wait tcp://localhost:5432 -timeout 1m
+
+      - run:
+          name: Copy config
+          command: make copy-config
+
+      - run:
+          name: Build assets
+          command: bundle exec rails assets:precompile
+
+      - save_cache:
+          name: Save gem cache
+          key: gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
+          paths:
+            - ./vendor/bundle
+
+      - save_cache:
+          name: Save yarn cache
+          key: yarn-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
+          paths:
+            - ~/.cache/yarn
+
+      - save_cache:
+          name: Save assets cache
+          key: assets-cache-v1-{{ arch }}-{{ .Branch }}
+          paths:
+            - ./public/assets
+            - ./public/packs-test
+
+      - run:
+          name: Rubocop comments for PR
+          command: |
+            PRONTO_GITHUB_ACCESS_TOKEN=${PRONTO_GITHUB_ACCESS_TOKEN} bundle exec pronto run -f github_pr -c origin/master
+
+      # Here we make sure that the secondary container boots
+      # up before we run operations on the database.
+      - run:
+          name: Wait for DB
+          command: dockerize -wait tcp://localhost:5432 -timeout 1m
+
+      - run:
+          name: Database create
+          command: bundle exec rails db:create
+
+      - run:
+          name: Database setup
+          command: bundle exec rails db:schema:load --trace
+
+      - run:
+          name: Run RSpec in parallel
+          command: |
+            TESTFILES=$(circleci tests glob "spec/**/*_spec.rb" | circleci tests split --split-by=timings)
+            bundle exec rspec --format progress --format RspecJunitFormatter \
+              -o ~/rspec/rspec.xml ${TESTFILES}
+
+      - store_artifacts:
+          path: ~/rspec
+
+      - store_test_results:
+          path: ~/rspec
+
+  hold:
+    machine: true
+    steps:
+      - run: echo 'You must approve to deploy this branch'
+
+  deploy:
+    docker:
+      - image: cimg/ruby:3.0.0
+
+    steps:
+      - checkout
+
+      - run:
+          name: Install system dependencies
+          command: sudo apt update && sudo apt install cmake curl
+
+workflows:
+  version: 2
+  test-and-deploy:
+    jobs:
+      - test
+      - hold:
+          type: approval
+          requires:
+            - test
+      - deploy:
+          requires:
+            - hold

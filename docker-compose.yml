@@ -1,0 +1,63 @@
+version: '3'
+services:
+  db:
+    image: postgres:11
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - TZ=Etc/UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data:delegated
+    networks:
+      - trullo_backend
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=postgres@postgres.co
+      - PGADMIN_DEFAULT_PASSWORD=postgres
+    ports:
+      - 8090:80
+    networks:
+      - trullo_backend
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    networks:
+      - trullo_backend
+  server:
+    image: trullo/server-dev
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.dev
+    environment:
+      - REDIS_CLIENT_URL=redis://redis:6379/0
+      - PRONTO_GITHUB_ACCESS_TOKEN
+    command: rails s -p 8000 -b '0.0.0.0'
+    volumes:
+      - .:/home/deploy/app
+      - /home/deploy/app/node_modules/
+      - ~/.ssh:/home/deploy/.ssh/ # Needed for deployment with capistrano
+    ports:
+      - "8000:8000"
+    # extra_hosts: # Enable this for docker in circle ci
+    #   - "${STAGING_HOST}:${STAGING_HOSTNAME}"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - trullo_backend
+
+volumes:
+  postgres-data:
+    driver: local
+
+networks:
+  trullo_backend:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16

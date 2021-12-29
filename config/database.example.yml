@@ -1,0 +1,17 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  username: postgres
+  timeout: 5000
+  host: localhost
+
+development:
+  primary:
+    <<: *default
+    database: trullo_development
+
+test:
+  primary:
+    <<: *default
+    database: trullo_test
