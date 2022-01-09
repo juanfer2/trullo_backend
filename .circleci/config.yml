@@ -43,13 +43,13 @@ jobs:
             - gem-cache-v1-{{ arch }}
             - gem-cache-v1
 
-      - restore_cache:
-          name: Restore yarn cache
-          keys:
-            - yarn-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
-            - yarn-cache-v1-{{ arch }}-{{ .Branch }}
-            - yarn-cache-v1-{{ arch }}
-            - yarn-cache-v1
+      # - restore_cache:
+      #     name: Restore yarn cache
+      #     keys:
+      #       - yarn-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
+      #       - yarn-cache-v1-{{ arch }}-{{ .Branch }}
+      #       - yarn-cache-v1-{{ arch }}
+      #       - yarn-cache-v1
 
       - restore_cache:
           name: Restore assets cache
@@ -99,11 +99,11 @@ jobs:
           paths:
             - ./vendor/bundle
 
-      - save_cache:
-          name: Save yarn cache
-          key: yarn-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
-          paths:
-            - ~/.cache/yarn
+      # - save_cache:
+      #     name: Save yarn cache
+      #     key: yarn-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
+      #     paths:
+      #       - ~/.cache/yarn
 
       - save_cache:
           name: Save assets cache
@@ -115,7 +115,7 @@ jobs:
       - run:
           name: Rubocop comments for PR
           command: |
-            PRONTO_GITHUB_ACCESS_TOKEN=${PRONTO_GITHUB_ACCESS_TOKEN} bundle exec pronto run -f github_pr -c origin/master
+            PRONTO_GITHUB_ACCESS_TOKEN=${PRONTO_GITHUB_ACCESS_TOKEN} bundle exec pronto run -f github_pr -c origin/main
 
       # Here we make sure that the secondary container boots
       # up before we run operations on the database.
@@ -127,16 +127,20 @@ jobs:
           name: Database create
           command: bundle exec rails db:create
 
+      # - run:
+      #     name: Database setup
+      #     command: bundle exec rails db:schema:load --trace
       - run:
-          name: Database setup
-          command: bundle exec rails db:schema:load --trace
+          name: Database run migrations
+          command: bundle exec rails db:migrate
 
       - run:
           name: Run RSpec in parallel
-          command: |
-            TESTFILES=$(circleci tests glob "spec/**/*_spec.rb" | circleci tests split --split-by=timings)
-            bundle exec rspec --format progress --format RspecJunitFormatter \
-              -o ~/rspec/rspec.xml ${TESTFILES}
+          command: bundle exec rails spec
+          #command: |
+          #  TESTFILES=$(circleci tests glob "spec/**/*_spec.rb" | circleci tests split --split-by=timings)
+          #  bundle exec rspec --format progress --format RspecJunitFormatter \
+          #    -o ~/rspec/rspec.xml ${TESTFILES}
 
       - store_artifacts:
           path: ~/rspec

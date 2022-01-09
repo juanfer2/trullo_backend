@@ -97,3 +97,11 @@ group :test, :development do
   gem 'pronto-rubocop', '0.11.1', require: false
   gem 'rubocop', '1.19', require: false
 end
+
+# image
+gem 'active_storage_validations', '0.9.6'
+
+# graphql
+gem 'graphql', '1.13.4'
+gem 'graphlient', '0.5.0'
+gem "graphiql-rails", group: :development

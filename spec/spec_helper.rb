@@ -16,7 +16,6 @@
 require 'capybara/rspec'
 require 'rack_session_access/capybara'
 require 'selenium/webdriver'
-require 'aasm/rspec'
 require 'active_storage_validations/matchers'
 
 RSpec.configure do |config|
